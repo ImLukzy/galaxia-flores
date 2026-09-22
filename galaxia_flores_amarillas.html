@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaxia de Flores Amarillas</title>
+    <!-- Importamos la fuente romántica desde Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #020205; /* Espacio profundo y oscuro */
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        /* Reproducción exacta de la etiqueta superior (Píldora) */
+        .ui-container {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .flower-badge {
+            background-color: #facc15;
+            color: #3e2723;
+            padding: 10px 24px;
+            border-radius: 9999px; /* Forma de píldora */
+            font-size: 1.1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 0 20px rgba(250, 204, 21, 0.4), 
+                        inset 0 0 10px rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            white-space: nowrap;
+        }
+
+        /* Pantalla de carga mientras se preparan los canvas y fuentes */
+        #loader {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #020205;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #facc15;
+            font-family: 'Dancing Script', cursive;
+            font-size: 2.5rem;
+            z-index: 20;
+            transition: opacity 1s ease-out;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div class="ui-container">
+        <div class="flower-badge">
+            Feliz Día de las Flores Amarillas 🌻
+        </div>
+    </div>
+
+    <div id="loader">Preparando tu galaxia... ✨</div>
+    <div id="canvas-container"></div>
+
+    <!-- Librerías de Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let galaxyGroup, planetGroup;
+
+        // Frases románticas idénticas a la imagen
+        const phrases = [
+            "Mi persona favorita", "Eres mi luz", "Siempre tú", 
+            "Para ti", "Brillas como el sol", "Mi Girasol", 
+            "Feliz 21 de Septiembre", "Te quiero muchísimo", 
+            "Día de las Flores Amarillas", "Sonríe siempre"
+        ];
+
+        // Esperamos a que la fuente personalizada cargue antes de dibujar los canvas
+        document.fonts.ready.then(() => {
+            init();
+            animate();
+            // Desvanecer el loader
+            setTimeout(() => {
+                document.getElementById('loader').style.opacity = '0';
+                setTimeout(() => document.getElementById('loader').style.display = 'none', 1000);
+            }, 500);
+        });
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. Escena
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020205, 0.0015);
+
+            // 2. Cámara (Con ángulo superior para apreciar el disco)
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 50, 140);
+
+            // 3. Renderizador optimizado
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            // 4. Controles (OrbitControls)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxDistance = 300;
+            controls.minDistance = 30;
+            controls.maxPolarAngle = Math.PI / 2 + 0.2; // Evita ir demasiado por debajo de la galaxia
+
+            planetGroup = new THREE.Group();
+            scene.add(planetGroup);
+
+            // Núcleo del planeta (Dorado)
+            const planetGeo = new THREE.SphereGeometry(12, 64, 64);
+            const planetMat = new THREE.MeshBasicMaterial({ color: 0xffc107 }); // Amarillo dorado sólido
+            const planet = new THREE.Mesh(planetGeo, planetMat);
+            planetGroup.add(planet);
+
+            // Resplandor del planeta (Additive Blending)
+            const glowGeo = new THREE.SphereGeometry(14.5, 64, 64);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xffeb3b,
+                transparent: true,
+                opacity: 0.3,
+                blending: THREE.AdditiveBlending,
+                side: THREE.BackSide
+            });
+            const glow = new THREE.Mesh(glowGeo, glowMat);
+            planetGroup.add(glow);
+
+            // Anillos orbitales concéntricos
+            const createRing = (radius, opacity, thickness = 0.15) => {
+                const ringGeo = new THREE.RingGeometry(radius, radius + thickness, 64);
+                const ringMat = new THREE.MeshBasicMaterial({ 
+                    color: 0xffd54f, 
+                    transparent: true, 
+                    opacity: opacity, 
+                    side: THREE.DoubleSide,
+                    blending: THREE.AdditiveBlending
+                });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = Math.PI / 2; // Acostar el anillo
+                return ring;
+            };
+
+            planetGroup.add(createRing(18, 0.8));
+            planetGroup.add(createRing(21, 0.5, 0.1));
+            planetGroup.add(createRing(24, 0.3, 0.08));
+
+            galaxyGroup = new THREE.Group();
+            scene.add(galaxyGroup);
+
+            // Función para crear Sprites de Texto con proporción correcta
+            function createTextSprite(text) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const fontSize = 48;
+                ctx.font = `bold ${fontSize}px "Dancing Script"`;
+                
+                const metrics = ctx.measureText(text);
+                const textWidth = Math.ceil(metrics.width);
+                
+                // Ajustar canvas al tamaño del texto exacto para no deformarlo
+                canvas.width = textWidth + 20; 
+                canvas.height = fontSize * 2;
+
+                // Re-aplicar fuente tras cambiar tamaño de canvas
+                ctx.font = `bold ${fontSize}px "Dancing Script"`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Estilo del texto (Blanco amarillento con sombra para legibilidad)
+                ctx.fillStyle = '#fffde7'; 
+                ctx.shadowColor = 'rgba(255, 235, 59, 0.6)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.minFilter = THREE.LinearFilter;
+                
+                const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                const sprite = new THREE.Sprite(material);
+                
+                // Escalar respetando el aspect ratio original del canvas
+                const scaleFactor = 0.08; 
+                sprite.scale.set(canvas.width * scaleFactor, canvas.height * scaleFactor, 1);
+                
+                return sprite;
+            }
+
+            // Función para crear un Ramo de Flores (Bouquet) dibujando emojis superpuestos
+            function createBouquetTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 200;
+                const ctx = canvas.getContext('2d');
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Dibujar un ramo agrupando emojis de girasol en diferentes posiciones y tamaños
+                const emojis = [
+                    { x: 0, y: -20, s: 75 },
+                    { x: -30, y: 10, s: 65 },
+                    { x: 30, y: 10, s: 65 },
+                    { x: -15, y: -35, s: 55 },
+                    { x: 15, y: -35, s: 55 },
+                    { x: 0, y: 35, s: 70 }
+                ];
+
+                const centerX = 100;
+                const centerY = 100;
+
+                emojis.forEach(e => {
+                    ctx.font = `${e.s}px sans-serif`;
+                    // Pequeña sombra para dar profundidad al ramo
+                    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+                    ctx.shadowBlur = 4;
+                    ctx.fillText('🌻', centerX + e.x, centerY + e.y);
+                });
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.minFilter = THREE.LinearFilter;
+                return texture;
+            }
+
+            const bouquetTexture = createBouquetTexture();
+            const elementsCount = 200; // Textos y ramos
+
+            for (let i = 0; i < elementsCount; i++) {
+                let sprite;
+                // Alternar aleatoriamente entre Frase y Ramo de flores
+                if (Math.random() > 0.4) {
+                    const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+                    sprite = createTextSprite(phrase);
+                } else {
+                    const mat = new THREE.SpriteMaterial({ map: bouquetTexture, transparent: true });
+                    sprite = new THREE.Sprite(mat);
+                    sprite.scale.set(12, 12, 1); // Tamaño del ramo
+                }
+
+                // Distribución en disco plano
+                const radius = 30 + Math.random() * 110; // Entre radio 30 y 140
+                const theta = Math.random() * Math.PI * 2;
+                
+                // Y está restringido para que sea un disco plano (galaxia)
+                const yOffset = (Math.random() - 0.5) * 8; 
+
+                sprite.position.x = radius * Math.cos(theta);
+                sprite.position.y = yOffset;
+                sprite.position.z = radius * Math.sin(theta);
+
+                galaxyGroup.add(sprite);
+            }
+
+            // Sistema de partículas del disco (Polvo dorado)
+            const dustGeo = new THREE.BufferGeometry();
+            const dustVertices = [];
+            for (let i = 0; i < 1500; i++) {
+                const r = 25 + Math.random() * 125;
+                const theta = Math.random() * Math.PI * 2;
+                const y = (Math.random() - 0.5) * 10;
+                dustVertices.push(r * Math.cos(theta), y, r * Math.sin(theta));
+            }
+            dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(dustVertices, 3));
+            
+            const dustMat = new THREE.PointsMaterial({
+                color: 0xffe57f,
+                size: 0.8,
+                transparent: true,
+                opacity: 0.8,
+                blending: THREE.AdditiveBlending
+            });
+            const dustPoints = new THREE.Points(dustGeo, dustMat);
+            galaxyGroup.add(dustPoints);
+
+            const starsGeo = new THREE.BufferGeometry();
+            const starsVertices = [];
+            for (let i = 0; i < 3000; i++) {
+                const x = (Math.random() - 0.5) * 600;
+                const y = (Math.random() - 0.5) * 600;
+                const z = (Math.random() - 0.5) * 600;
+                
+                // Excluir la zona del sistema central
+                if(Math.sqrt(x*x + y*y + z*z) < 150) continue;
+                
+                starsVertices.push(x, y, z);
+            }
+            starsGeo.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+            const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, transparent: true, opacity: 0.5 });
+            const stars = new THREE.Points(starsGeo, starsMat);
+            scene.add(stars);
+
+            // Manejo del redimensionamiento de la ventana
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const elapsedTime = clock.getElapsedTime();
+
+            // Rotación suave del disco galáctico sobre el eje Y
+            if (galaxyGroup) {
+                galaxyGroup.rotation.y += 0.001;
+                // Pequeña fluctuación flotante
+                galaxyGroup.position.y = Math.sin(elapsedTime * 0.5) * 1.5;
+            }
+
+            // Rotación del planeta central y sus anillos
+            if (planetGroup) {
+                planetGroup.rotation.y += 0.003;
+            }
+
+            // Actualizar controles para damping (suavidad al soltar el ratón)
+            controls.update();
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
